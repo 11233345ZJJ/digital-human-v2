@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "avatar.drive.v2.drive.schema.json",
+  "title": "Avatar V2 DriveCommand",
+  "description": "统一驱动数据接口 V2.0 —— Web 端调试用 JSON Schema（线上契约以 proto/drive.proto 为准）",
+  "definitions": {
+    "emotion_label": {
+      "type": "string",
+      "enum": ["happy", "angry", "sad", "afraid", "disgusted", "melancholic", "surprised", "calm"]
+    },
+    "emotion": {
+      "type": "object",
+      "required": ["label", "vector", "intensity"],
+      "properties": {
+        "label": { "$ref": "#/definitions/emotion_label" },
+        "vector": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "minItems": 8,
+          "maxItems": 8,
+          "description": "8 维情绪向量，顺序: happy/angry/sad/afraid/disgusted/melancholic/surprised/calm"
+        },
+        "intensity": { "type": "number", "minimum": 0, "maximum": 1, "description": "emo_alpha 强度标量" },
+        "valence": { "type": "number", "minimum": -1, "maximum": 1 },
+        "arousal": { "type": "number", "minimum": -1, "maximum": 1 },
+        "dominance": { "type": "number", "minimum": -1, "maximum": 1 }
+      }
+    },
+    "semantic_meta": {
+      "type": "object",
+      "required": ["intent", "style", "cause"],
+      "properties": {
+        "intent": { "type": "string", "description": "为何产生此情绪" },
+        "style": { "type": "string", "description": "表演风格" },
+        "cause": { "type": "string", "description": "情绪诱因" }
+      }
+    },
+    "expression": {
+      "type": "object",
+      "required": ["name", "weight"],
+      "properties": {
+        "name": { "type": "string" },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "head_pose": {
+      "type": "object",
+      "required": ["yaw", "pitch", "roll"],
+      "properties": {
+        "yaw": { "type": "number" },
+        "pitch": { "type": "number" },
+        "roll": { "type": "number" }
+      }
+    },
+    "body_gesture": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "params": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "audio_chunk": {
+      "type": "object",
+      "required": ["timestamp_ms", "duration_ms", "pcm_b64", "emotion"],
+      "properties": {
+        "type": { "const": "audio" },
+        "timestamp_ms": { "type": "integer", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "pcm_b64": { "type": "string", "contentEncoding": "base64" },
+        "emotion": { "$ref": "#/definitions/emotion" },
+        "phoneme": { "type": "string" },
+        "sample_rate": { "type": "integer", "minimum": 8000 },
+        "sentence_done": { "type": "boolean" },
+        "trace_id": { "type": "string" }
+      }
+    }
+  },
+  "type": "object",
+  "required": ["timestamp_ms", "frame_seq", "emotion"],
+  "properties": {
+    "timestamp_ms": { "type": "integer", "minimum": 0, "description": "与音频时钟/TTS 输出时钟对齐" },
+    "phoneme": { "type": "string", "description": "当前口型视素" },
+    "expression": { "$ref": "#/definitions/expression" },
+    "head_pose": { "$ref": "#/definitions/head_pose" },
+    "body_gesture": { "$ref": "#/definitions/body_gesture" },
+    "emotion": { "$ref": "#/definitions/emotion" },
+    "semantic_meta": { "$ref": "#/definitions/semantic_meta" },
+    "frame_seq": { "type": "integer", "minimum": 0 },
+    "trace_id": { "type": "string", "description": "全链路追踪 ID（/chat 返回，随帧下发）" }
+  }
+}

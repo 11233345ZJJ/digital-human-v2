@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Avatar V2 · 驱动流调试台</title>
+<style>
+  body { font-family: monospace; background: #111; color: #ddd; margin: 0; padding: 16px; }
+  h1 { font-size: 16px; color: #7af; }
+  #status { color: #9d9; font-size: 12px; margin-bottom: 8px; }
+  #face { width: 220px; height: 220px; float: left; margin-right: 20px; }
+  .panel { background: #1b1b1b; border: 1px solid #333; padding: 10px; margin-bottom: 10px; border-radius: 6px; }
+  .panel h2 { font-size: 13px; color: #fa7; margin: 0 0 8px 0; }
+  .bar { height: 8px; background: #333; border-radius: 4px; overflow: hidden; margin: 2px 0 6px; }
+  .bar > i { display: block; height: 100%; background: #7af; transition: width .2s; }
+  table { border-collapse: collapse; font-size: 12px; }
+  td, th { padding: 2px 10px 2px 0; text-align: left; }
+  .btn { background: #2a2a2a; color: #eee; border: 1px solid #555; border-radius: 4px;
+         padding: 5px 12px; cursor: pointer; margin-right: 6px; font-size: 12px; }
+  .btn:hover { background: #3a3a3a; }
+  select, input[type=text] { background: #2a2a2a; color: #eee; border: 1px solid #555;
+         border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+  input[type=text] { width: 240px; }
+  #log { height: 140px; overflow-y: auto; font-size: 11px; color: #8a8; }
+  #trace { font-size: 11px; color: #ff9; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Avatar V2 · 驱动流调试台 <span id="conn">(SSE 未连接)</span></h1>
+<div id="status">渲染后端: - / 帧: - / 时间戳: - / <span id="audioClock">音频时钟: -</span></div>
+<div class="panel">
+  <h2>SVG 调试头像（表情/口型/姿态，按音频时钟逐帧消费）</h2>
+  <svg id="face" viewBox="0 0 200 200">
+    <circle cx="100" cy="105" r="88" fill="#f2d5b6" stroke="#333" stroke-width="2"/>
+    <ellipse id="eyeL" cx="68" cy="95" rx="11" ry="13" fill="#fff" stroke="#222"/>
+    <circle cx="68" cy="95" r="4" fill="#222"/>
+    <ellipse id="eyeR" cx="132" cy="95" rx="11" ry="13" fill="#fff" stroke="#222"/>
+    <circle cx="132" cy="95" r="4" fill="#222"/>
+    <path id="mouth" d="M65 145 Q100 155 135 145 Q100 165 65 145" fill="#b04a4a"/>
+  </svg>
+  <table>
+    <tr><th>情绪标签</th><td id="emotionLabel">-</td></tr>
+    <tr><th>表情</th><td id="expression">-</td></tr>
+    <tr><th>视素</th><td id="phoneme">-</td></tr>
+    <tr><th>动作</th><td id="gesture">-</td></tr>
+    <tr><th>意图/风格</th><td id="meta">-</td></tr>
+    <tr><th>音频缓冲</th><td id="audioBuf">-</td></tr>
+  </table>
+  <div id="emobars"></div>
+</div>
+<div class="panel">
+  <h2>控制</h2>
+  <button class="btn" id="soundBtn" onclick="enableSound()">启用声音（浏览器手势解锁）</button>
+  <div style="margin:8px 0">
+    <input type="text" id="chatText" value="介绍一下你自己" placeholder="输入对话文本…"
+           onkeydown="if(event.key==='Enter')chat()">
+    LLM <select id="llmSel"><option value="mock">mock</option><option value="zhipu">zhipu</option></select>
+    TTS <select id="ttsSel"><option value="sherpa">sherpa</option><option value="mock">mock</option></select>
+    <button class="btn" onclick="chat()">发起对话</button>
+    <button class="btn" onclick="bargeIn()">打断 (barge-in)</button>
+  </div>
+  <div style="margin:8px 0">
+    <button class="btn" id="micBtn" onclick="toggleMic()">🎤 说话（点击开始/停止）</button>
+    <label style="font-size:12px"><input type="checkbox" id="autoEnd" checked> 自动断句（静音自动发送）</label>
+    <span id="micStatus" style="font-size:12px;color:#fa7"></span>
+  </div>
+  <div id="asrLive" style="min-height:20px;font-size:15px;color:#7cf;margin:4px 0 6px"></div>
+  <span id="switchBtns"></span>
+  <div style="margin-top:8px">
+    <input type="file" id="audioFile" accept="audio/wav" style="font-size:12px">
+    <button class="btn" onclick="uploadAudio()">上传语音 → SenseVoice 识别情绪</button>
+    <span id="userEmotion"></span>
+  </div>
+</div>
+<div class="panel"><h2>最近一轮 Trace（首响延迟拆解）</h2><div id="trace">-</div></div>
+<div class="panel"><h2>事件日志</h2><div id="log"></div></div>
+
+<script src="renderer.js"></script>
+</body>
+</html>

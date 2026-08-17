@@ -1,0 +1,127 @@
+// 统一驱动数据接口 V2.0
+// 定义与渲染无关的驱动指令，作为 LLM/TTS/情感分析到渲染层的唯一通信协议。
+syntax = "proto3";
+
+package avatar.drive.v2;
+
+// 8 维情绪向量（IndexTTS-2.5 标准）顺序固定：
+// [0] happy [1] angry [2] sad [3] afraid [4] disgusted [5] melancholic [6] surprised [7] calm
+enum EmotionLabel {
+  EMOTION_UNSPECIFIED = 0;
+  EMOTION_HAPPY = 1;
+  EMOTION_ANGRY = 2;
+  EMOTION_SAD = 3;
+  EMOTION_AFRAID = 4;
+  EMOTION_DISGUSTED = 5;
+  EMOTION_MELANCHOLIC = 6;
+  EMOTION_SURPRISED = 7;
+  EMOTION_CALM = 8;
+}
+
+// 统一情感中间表示：8 维情绪向量 + 强度标量，
+// 同时喂给 TTS 与渲染层，两端共用同一中间表示（降低级联误差的核心机制）。
+message Emotion {
+  EmotionLabel label = 1;        // 主情绪标签
+  repeated float vector = 2;     // 8 维情绪向量 [happy..calm]
+  float intensity = 3;           // emo_alpha 强度标量 0–1
+  // 辅助：VAD（Valence-Arousal-Dominance）三维情感空间，便于跨模型对齐
+  float valence = 4;             // -1..1 效价
+  float arousal = 5;             // -1..1 唤醒度
+  float dominance = 6;           // -1..1 支配度
+}
+
+// 语义元数据：表演意图 / 风格 / 情绪成因
+message SemanticMeta {
+  string intent = 1;             // 为何产生此情绪（如"用户在质疑产品价格"）
+  string style = 2;              // 表演风格（如"温柔安抚"/"兴奋推荐"）
+  string cause = 3;              // 情绪诱因
+}
+
+message Expression {
+  string name = 1;               // 表情名称（两端映射，如 "smile"/"anger"）
+  float weight = 2;              // 0–1 强度
+}
+
+message HeadPose {
+  float yaw = 1;                 // 弧度
+  float pitch = 2;
+  float roll = 3;
+}
+
+message BodyGesture {
+  string name = 1;               // 动作名（动作库检索键）
+  map<string, float> params = 2; // 动作参数
+}
+
+// 单帧驱动指令（时间戳有序队列传输，渲染器按时间戳逐帧消费）
+message DriveCommand {
+  uint64 timestamp_ms = 1;       // 时间戳（与音频时钟/TTS 输出时钟对齐）
+  string phoneme = 2;            // 当前口型视素
+  Expression expression = 3;     // 表情基/参数
+  HeadPose head_pose = 4;        // 头部姿态
+  BodyGesture body_gesture = 5;  // 肢体动作
+  Emotion emotion = 6;           // 统一情绪中间表示
+  SemanticMeta semantic_meta = 7; // 表演意图 / 风格 / 情绪成因
+  uint32 frame_seq = 8;          // 帧序号（打断后单调递增，用于端侧去重）
+  string trace_id = 9;           // 全链路追踪 ID（从 /chat 到渲染端）
+}
+
+// 音频块（TTS 输出，与 DriveCommand 共享同一时间戳时钟源）
+message AudioChunk {
+  uint64 timestamp_ms = 1;       // 音频时钟
+  uint64 duration_ms = 2;        // 本块时长
+  bytes pcm_s16le = 3;           // 16-bit PCM 数据
+  Emotion emotion = 4;           // 本块对应的情绪标签
+  string phoneme = 5;            // 本块起始视素（可选）
+  uint32 sample_rate = 6;        // 采样率（TTS 引擎决定，如 22050）
+  string trace_id = 7;           // 全链路追踪 ID
+}
+
+// 系统级事件（打断/切换/降级通知）
+message DriveEvent {
+  enum Type {
+    EVENT_UNSPECIFIED = 0;
+    EVENT_BARGE_IN = 1;          // 用户打断，清空未消费队列
+    EVENT_RENDERER_SWITCH = 2;   // 渲染后端切换（含原因）
+    EVENT_RENDERER_DEGRADE = 3;  // 自动降级
+    EVENT_TURN_START = 4;
+    EVENT_TURN_END = 5;
+    EVENT_PING = 6;
+  }
+  Type type = 1;
+  uint64 timestamp_ms = 2;
+  string detail = 3;             // 附加说明（如切换原因）
+  string renderer = 4;           // 相关渲染后端名（切换/降级时）
+}
+
+// 渲染端注册（管理端 → 服务端）
+message RendererRegister {
+  string name = 1;               // 后端名（flashhead / babylon3d / live2d / audio）
+  string kind = 2;               // 后端类型枚举名
+  map<string, string> capability = 3;  // 能力声明（fps / gpu / webgpu 等）
+}
+
+// 渲染端 → 服务端：性能遥测（每帧上报，服务端每秒聚合）
+message RendererTelemetry {
+  uint64 timestamp_ms = 1;
+  float fps = 2;                 // 实测帧率
+  float gpu_temp_c = 3;          // GPU 温度
+  float gpu_util = 4;            // GPU 利用率 0–1
+  float memory_mb = 5;           // 已用内存
+  float buffer_ms = 6;           // 驱动队列缓冲水位（毫秒）
+  string renderer = 7;           // 上报来源后端
+}
+
+message DriveFrameBatch {
+  repeated DriveCommand commands = 1;
+}
+
+// 服务端 → 客户端统一消息封套（二进制通道）：
+// 驱动帧与音频块按时间戳交错下发，客户端按 kind 解码。
+message ServerMessage {
+  oneof kind {
+    DriveCommand command = 1;    // 驱动帧
+    AudioChunk audio = 2;        // TTS 音频块（PCM）
+    DriveFrameBatch batch = 3;   // 批量驱动帧（预留）
+  }
+}
