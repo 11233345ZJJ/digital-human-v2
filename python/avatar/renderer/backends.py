@@ -50,6 +50,8 @@ def build_mock_registry() -> Any:
                               note="SoulX-FlashHead 1.3B, 96FPS@4090"))
     reg.register(MockRenderer("babylon3d", "3d", 2, gpu_load=0.6,
                               note="BabylonJS/Three.js + VRM"))
+    reg.register(MockRenderer("vrm", "vrm_3d", 2, gpu_load=0.5,
+                              note="Three.js + @pixiv/three-vrm（web/vrm.html 已实现）"))
     reg.register(MockRenderer("live2d", "live2d", 1, gpu_load=0.25,
                               note="Cubism 5 Web SDK"))
     reg.register(MockRenderer("audio", "audio_only", 0, gpu_load=0.0,

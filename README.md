@@ -6,6 +6,7 @@
 里程碑 4：**sherpa-onnx 真实 TTS + Trace ID 全链路日志**（真实音频流 + 音画时间戳对齐 + 首响延迟拆解）。
 里程碑 5：**语音输入闭环**（浏览器麦克风 → SenseVoice → 共情起轮，语音可随时打断播报）。
 里程碑 6：**流式语音识别**（WS 实时推流 + 增量分块识别 + 实时字幕 + 能量 VAD 自动断句）。
+里程碑 7：**VRM 真实渲染后端**（Three.js + @pixiv/three-vrm，首个接入 DriveCommand 的 3D 后端）。
 
 以 LLM 为核心，从流式文本生成 → 情感分析 → 情感语音合成 → 数字人表情动作
 驱动的全链路多模态交互系统。整体采用流式并行架构：首句生成后立即触发下游
@@ -32,7 +33,10 @@ python/avatar/
     driving.py      DriveCommand 帧生成（20fps，表情/姿态/动作映射）
   renderer/        IRenderer 注册表 + 降级链 + easeInOutCubic 切换插值
   server/          FastAPI：/ws/drive(protobuf) /sse/drive(JSON+音频) /chat /tts/preview
-web/               SSE 调试台（SVG 头像 + WebAudio 音频播放 + 音画时钟同步）
+web/               Web 前端
+  renderer.html/js  SSE 调试台（SVG 头像 + WebAudio + 实时字幕）
+  vrm.html/js       VRM 渲染后端（Three.js + three-vrm，首个真实 3D 后端）
+  vendor/           本地依赖（three/three-vrm/GLTFLoader + VRM 示例模型，离线可用）
 tests/             单元测试（stdlib + pytest）
 models/sensevoice/ SenseVoiceSmall 模型（model.pt + config + tokenizer，自动/手动下载）
 models/tts/        Matcha-TTS zh-baker + vocos 声码器（手动下载，见下）
@@ -183,6 +187,25 @@ Web 调试台「🎤 说话」按钮（点击开始/再点击停止发送）+「
   亦可用 `?api=http://host:port` 覆盖
 - CLI 验证（非流式）：`curl -F file=@user16k.wav "http://127.0.0.1:8765/voice/turn?llm=zhipu&tts=sherpa"`
 
+## VRM 渲染后端（里程碑 7）
+
+`web/vrm.html` —— 首个真实 3D 渲染后端（Three.js r160 + @pixiv/three-vrm 2.1.3）：
+- **DriveCommand 直连**：WS JSON 模式订阅 `/ws/drive`，按音频时钟逐帧消费
+  （实测一轮 331 帧 / 16.6s 音频，帧与音频共用 TTS 时钟）
+- **表情**：探测式 preset 映射（happy/angry/sad/surprised/relaxed…，
+  VRM0/VRM1 兼容，模型缺该表情则跳过）+ 强度即 weight
+- **口型**：phoneme → viseme（aa/ih/ou/ee/oh）+ 程序化自动眨眼
+- **头姿**：head_pose 增量旋转；**目光**跟随相机；鼠标拖拽轨道视角
+- **手势**：body_gesture → 程序化骨骼动画（wave/cheer/nod/bow/soothe/
+  think/applaud/fist_pump/lean_in/encourage/idle，起止 easeInOutCubic 包络）
+- 换模型：`vrm.html?model=./xxx.vrm`（vendor 内置 pixiv 官方示例模型，
+  表情 18 种 / 骨骼 54 根，VRM 1.0 许可）
+- vendor 本地化，无 CDN 依赖，离线可用
+- 服务端注册表已含 `vrm` 后端（`POST /renderers/switch {"name":"vrm"}`）
+
+> 浏览器验收实测：模型加载 18 表情 → 发起对话 → 口型随音素开合、
+> encourage/bow 手势依次触发、trace 全程一致、无 CORS/WS 错误。
+
 ## 统一驱动数据接口（V2.0 核心）
 
 ```protobuf
@@ -231,14 +254,17 @@ DriveCommand {
 - [x] 流式语音识别：WS 实时推 PCM → 增量分块 partial 实时字幕 →
       能量 VAD 自动断句 → final 无缝衔接对话轮（同一条 trace 全链路）
 - [x] VoiceSession 单测 10 项（VAD 计数/partial 节流/窗口上限/自动收尾/取消）
+- [x] VRM 真实渲染后端：Three.js + three-vrm 消费 DriveCommand（表情/视素/
+      头姿/程序化手势/目光跟随），vendor 本地化离线可用
+- [x] 开发期 CORS（localhost 任意端口）——修复跨源调试台 fetch 被拦截
 
-## 下一步（里程碑 7 候选）
+## 下一步（里程碑 8 候选）
 
-- 真实渲染后端（Cubism Live2D / Three.js VRM / WebGPU）
+- Live2D（Cubism 5 Web SDK）/ 视频神经渲染（FlashHead）后端补齐降级链
+- SQLite 动作库 + 运动融合（替代程序化手势）+ LLM 直驱帧级表情
 - WebRTC 音频推流 + 动态缓冲水位反馈
-- LLM 直驱表情/动作指令通道（SoulLink 模式）+ 动作库检索
 - 音素级口型时间线（替代当前字符近似视素）
-- VAD 升级 silero（sherpa-onnx 自带）替代能量阈值，提升嘈杂环境鲁棒性
+- silero VAD 替代能量阈值（嘈杂环境）
 
 ## 已知问题
 

@@ -352,6 +352,17 @@ class ConversationService:
 def create_app() -> FastAPI:
     app = FastAPI(title="Avatar V2 Drive Service", lifespan=lifespan)
 
+    # 开发期 CORS：Web 调试台（:8080 静态服务）跨域访问 API（:8765）。
+    # 生产部署建议同源伺服或收紧 allow_origins。
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     @app.get("/health")
     async def health():
         svc: ConversationService = app.state.service
