@@ -7,6 +7,7 @@
 里程碑 5：**语音输入闭环**（浏览器麦克风 → SenseVoice → 共情起轮，语音可随时打断播报）。
 里程碑 6：**流式语音识别**（WS 实时推流 + 增量分块识别 + 实时字幕 + 能量 VAD 自动断句）。
 里程碑 7：**VRM 真实渲染后端**（Three.js + @pixiv/three-vrm，首个接入 DriveCommand 的 3D 后端）。
+里程碑 8：**Live2D 渲染后端**（pixi + Cubism4，VRM 降级档；音频/WS/帧队列抽共享模块 common.js）。
 
 以 LLM 为核心，从流式文本生成 → 情感分析 → 情感语音合成 → 数字人表情动作
 驱动的全链路多模态交互系统。整体采用流式并行架构：首句生成后立即触发下游
@@ -34,9 +35,11 @@ python/avatar/
   renderer/        IRenderer 注册表 + 降级链 + easeInOutCubic 切换插值
   server/          FastAPI：/ws/drive(protobuf) /sse/drive(JSON+音频) /chat /tts/preview
 web/               Web 前端
+  common.js         渲染后端共享运行时（音频/TTS 时钟/WS 订阅/时间戳帧队列）
   renderer.html/js  SSE 调试台（SVG 头像 + WebAudio + 实时字幕）
-  vrm.html/js       VRM 渲染后端（Three.js + three-vrm，首个真实 3D 后端）
-  vendor/           本地依赖（three/three-vrm/GLTFLoader + VRM 示例模型，离线可用）
+  vrm.html/js       VRM 渲染后端（Three.js + three-vrm，3D 档）
+  live2d.html/js    Live2D 渲染后端（pixi + Cubism4，降级档）
+  vendor/           本地依赖（three/three-vrm/pixi/cubism4/core + VRM/Live2D 示例模型，离线可用）
 tests/             单元测试（stdlib + pytest）
 models/sensevoice/ SenseVoiceSmall 模型（model.pt + config + tokenizer，自动/手动下载）
 models/tts/        Matcha-TTS zh-baker + vocos 声码器（手动下载，见下）
@@ -206,6 +209,33 @@ Web 调试台「🎤 说话」按钮（点击开始/再点击停止发送）+「
 > 浏览器验收实测：模型加载 18 表情 → 发起对话 → 口型随音素开合、
 > encourage/bow 手势依次触发、trace 全程一致、无 CORS/WS 错误。
 
+## Live2D 渲染后端（里程碑 8，VRM 降级档）
+
+`web/live2d.html` —— 2D 降级档（pixi.js 7 + pixi-live2d-display 0.4 + Cubism Core，全部 vendor 本地化）：
+- **参数直驱**：DriveCommand → Cubism 标准参数——head_pose（弧度→度，±30 clamp，
+  ParamAngleX/Y/Z + 身体/眼球联动）、phoneme→ParamMouthOpenY/MouthForm（AA 全开…辅音微开）、
+  expression → 眉/眼/嘴参数 weight 加权 blend（7 类情绪各有目标参数向量）
+- **手势检索**：body_gesture → 模型 Tap motion 组触发（FORCE 优先级）；nod 走参数直驱
+- **驱动唯一源原则**：禁用模型 Idle 自动组（头部/口型只听 DriveCommand），
+  保留 physics 摆发 + 自动眨眼 + LipSync 组
+- **覆盖点**：renderer `prerender` 事件中 set 参数（motion/physics 更新后、绘制前，
+  避免被 motion 覆盖）
+- 实测：一轮 336 帧 / 16.9s 按音频时钟消费，头部正弦摆动 / 口型 AA→N→F→IH 序列 /
+  bow·cheer·soothe·encourage 动作依次触发
+- 共享运行时 `common.js`（vrm/live2d 两后端音画同步语义一致）
+- 换模型：`live2d.html?model=./xxx.model3.json`
+- 许可注意：pixi-live2d-display（MIT，已停更）+ Cubism Core（Live2D 官方条款）；
+  生产建议迁移 Cubism 5 Web SDK 官方栈（Open-LLM-VTuber 路线），接口层可复用本实现
+
+## 渲染后端矩阵
+
+| 后端 | 页面 | 技术 | 状态 |
+| --- | --- | --- | --- |
+| VRM（3D 档） | `vrm.html` | Three.js + three-vrm | ✅ 已实现 |
+| Live2D（2D 档） | `live2d.html` | pixi + Cubism4 | ✅ 已实现 |
+| 视频神经渲染 | - | FlashHead（需 GPU） | 注册表占位，未实现 |
+| 纯音频 | - | 语音不中断兜底 | ✅（TTS 失败降级语义） |
+
 ## 统一驱动数据接口（V2.0 核心）
 
 ```protobuf
@@ -256,15 +286,18 @@ DriveCommand {
 - [x] VoiceSession 单测 10 项（VAD 计数/partial 节流/窗口上限/自动收尾/取消）
 - [x] VRM 真实渲染后端：Three.js + three-vrm 消费 DriveCommand（表情/视素/
       头姿/程序化手势/目光跟随），vendor 本地化离线可用
+- [x] Live2D 渲染后端：pixi + Cubism4 参数直驱（VRM 降级档），共享运行时
+      common.js 抽取（音频/WS/帧队列两后端一致）
 - [x] 开发期 CORS（localhost 任意端口）——修复跨源调试台 fetch 被拦截
 
-## 下一步（里程碑 8 候选）
+## 下一步（里程碑 9 候选）
 
-- Live2D（Cubism 5 Web SDK）/ 视频神经渲染（FlashHead）后端补齐降级链
-- SQLite 动作库 + 运动融合（替代程序化手势）+ LLM 直驱帧级表情
+- 视频神经渲染（FlashHead）后端补齐降级链最高档（需 GPU）
+- SQLite 动作库 + 运动融合（替代程序化手势/Tap motion 检索）+ LLM 直驱帧级表情
 - WebRTC 音频推流 + 动态缓冲水位反馈
 - 音素级口型时间线（替代当前字符近似视素）
 - silero VAD 替代能量阈值（嘈杂环境）
+- Live2D 栈迁移 Cubism 5 Web SDK 官方（接口层可复用）
 
 ## 已知问题
 

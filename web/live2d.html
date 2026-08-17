@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Avatar V2 · Live2D 渲染后端</title>
+<!-- Live2D 依赖加载顺序：pixi → cubism core → live2d-display（挂 PIXI.live2d） -->
+<script src="./vendor/live2d/pixi.min.js"></script>
+<script src="./vendor/live2d/live2dcubismcore.min.js"></script>
+<script src="./vendor/live2d/cubism4.min.js"></script>
+<style>
+  body { margin: 0; overflow: hidden; color: #ddd; font-family: monospace;
+         background: radial-gradient(ellipse at 50% 30%, #23233a 0%, #14141c 70%); }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { width: 100%; height: 100%; display: block; }
+  .panel { position: fixed; background: rgba(20,20,28,.82); border: 1px solid #333;
+           border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+  #ctrl { top: 10px; left: 10px; right: 10px; max-width: 720px; }
+  #hudbox { bottom: 10px; left: 10px; right: 10px; }
+  #hud { color: #9d9; }
+  #modelState { color: #fa7; margin-left: 8px; }
+  #conn { color: #f77; }
+  .btn { background: #2a2a2a; color: #eee; border: 1px solid #555; border-radius: 4px;
+         padding: 5px 12px; cursor: pointer; margin-right: 6px; font-size: 12px; }
+  .btn:hover { background: #3a3a3a; }
+  input[type=text], select { background: #2a2a2a; color: #eee; border: 1px solid #555;
+         border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+  input[type=text] { width: 200px; }
+  #log { margin-top: 6px; height: 66px; overflow-y: auto; font-size: 11px; color: #8a8; }
+  #tip { color: #666; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="panel" id="ctrl">
+  <button class="btn" id="soundBtn" onclick="enableSound()">启用声音（手势解锁）</button>
+  <input type="text" id="chatText" value="介绍一下你自己" onkeydown="if(event.key==='Enter')chat()">
+  LLM <select id="llmSel"><option value="mock">mock</option><option value="zhipu">zhipu</option></select>
+  TTS <select id="ttsSel"><option value="sherpa">sherpa</option><option value="mock">mock</option></select>
+  <button class="btn" onclick="chat()">发起对话</button>
+  <button class="btn" onclick="bargeIn()">打断</button>
+  <button class="btn" onclick="location.href='./vrm.html'">切到 VRM 后端 →</button>
+  <span id="conn">(WS 连接中…)</span><span id="modelState">模型加载中…</span>
+  <div id="log"></div>
+  <div id="tip">Live2D 降级档（pixi + cubism4）| DriveCommand → Cubism 参数直驱 | 音画共用 TTS 时钟</div>
+</div>
+<div class="panel" id="hudbox"><span id="hud">等待驱动帧…</span></div>
+
+<script type="module" src="./live2d.js"></script>
+</body>
+</html>

@@ -53,7 +53,7 @@ def build_mock_registry() -> Any:
     reg.register(MockRenderer("vrm", "vrm_3d", 2, gpu_load=0.5,
                               note="Three.js + @pixiv/three-vrm（web/vrm.html 已实现）"))
     reg.register(MockRenderer("live2d", "live2d", 1, gpu_load=0.25,
-                              note="Cubism 5 Web SDK"))
+                              note="pixi + Cubism4（web/live2d.html 已实现，VRM 降级档）"))
     reg.register(MockRenderer("audio", "audio_only", 0, gpu_load=0.0,
                               note="纯音频兜底（语音不中断）"))
     reg.set_degrade_chain(["flashhead", "babylon3d", "live2d", "audio"])
